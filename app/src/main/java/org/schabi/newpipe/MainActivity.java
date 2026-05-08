@@ -46,7 +46,7 @@ import android.widget.Spinner;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.ActionBar;
-import androidx.appcompat.app.ActionBarDrawerToggle;
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -112,8 +112,6 @@ public class MainActivity extends AppCompatActivity {
     private DrawerHeaderBinding drawerHeaderBinding;
     private DrawerLayoutBinding drawerLayoutBinding;
     private ToolbarLayoutBinding toolbarLayoutBinding;
-
-    private ActionBarDrawerToggle toggle;
 
     private boolean servicesShown = false;
 
@@ -239,10 +237,11 @@ public class MainActivity extends AppCompatActivity {
     private void setupDrawer() throws ExtractionException {
         addDrawerMenuForCurrentService();
 
-        toggle = new ActionBarDrawerToggle(this, mainBinding.getRoot(),
-                toolbarLayoutBinding.toolbar, R.string.drawer_open, R.string.drawer_close);
-        toggle.syncState();
-        mainBinding.getRoot().addDrawerListener(toggle);
+        // Lock the drawer everywhere — bottom navigation is now the primary
+        // entry point. The drawer is reachable only via the avatar button in
+        // the toolbar (which calls openServicesDrawer()) for power-user
+        // service / kiosk switching.
+        mainBinding.getRoot().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
         mainBinding.getRoot().addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
             private int lastService;
 
@@ -264,6 +263,74 @@ public class MainActivity extends AppCompatActivity {
 
         drawerLayoutBinding.navigation.setNavigationItemSelectedListener(this::drawerItemSelected);
         setupDrawerHeader();
+        setupBottomNavigation();
+    }
+
+    /**
+     * Open the (now hidden) drawer for service / kiosk switching. Called from
+     * the toolbar avatar action.
+     */
+    public void openServicesDrawer() {
+        mainBinding.getRoot().setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED);
+        mainBinding.getRoot().open();
+        // Re-lock once it's closed via the existing drawer listener.
+        mainBinding.getRoot().addDrawerListener(new DrawerLayout.SimpleDrawerListener() {
+            @Override
+            public void onDrawerClosed(final View drawerView) {
+                mainBinding.getRoot().setDrawerLockMode(
+                        DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
+                mainBinding.getRoot().removeDrawerListener(this);
+            }
+        });
+    }
+
+    private void setupBottomNavigation() {
+        mainBinding.bottomNavigation.setOnItemSelectedListener(item -> {
+            final int id = item.getItemId();
+            if (id == R.id.bottom_nav_home) {
+                NavigationHelper.openMainFragment(getSupportFragmentManager());
+                return true;
+            } else if (id == R.id.bottom_nav_shorts) {
+                NavigationHelper.openShortsFragment(getSupportFragmentManager());
+                return true;
+            } else if (id == R.id.bottom_nav_subscriptions) {
+                NavigationHelper.openFeedFragment(getSupportFragmentManager());
+                return true;
+            } else if (id == R.id.bottom_nav_you) {
+                NavigationHelper.openLibraryFragment(getSupportFragmentManager());
+                return true;
+            }
+            return false;
+        });
+        mainBinding.bottomNavigation.setOnItemReselectedListener(item -> { });
+
+        // Slide the bottom nav off-screen when the main player expands so the
+        // video gets the full width of the screen, like YouTube does.
+        final View navView = mainBinding.bottomNavigation;
+        final BottomSheetBehavior<FragmentContainerView> playerBehavior =
+                BottomSheetBehavior.from(mainBinding.fragmentPlayerHolder);
+        playerBehavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
+            @Override
+            public void onStateChanged(@NonNull final View bottomSheet, final int newState) {
+                // no-op; translation is driven by onSlide
+            }
+
+            @Override
+            public void onSlide(@NonNull final View bottomSheet, final float slideOffset) {
+                // slideOffset: -1 hidden, 0 collapsed (peek), 1 expanded
+                final float visible = Math.max(0f, Math.min(1f, slideOffset));
+                navView.setTranslationY(navView.getHeight() * visible);
+            }
+        });
+    }
+
+    /**
+     * Hide the bottom nav when fullscreen UI (player, video detail) is showing.
+     */
+    public void setBottomNavigationVisible(final boolean visible) {
+        if (mainBinding != null) {
+            mainBinding.bottomNavigation.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
     }
 
     /**
@@ -805,12 +872,8 @@ public class MainActivity extends AppCompatActivity {
                 .findFragmentById(R.id.fragment_holder);
         if (fragment instanceof MainFragment) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(false);
-            if (toggle != null) {
-                toggle.syncState();
-                toolbarLayoutBinding.toolbar.setNavigationOnClickListener(v -> mainBinding.getRoot()
-                        .open());
-                mainBinding.getRoot().setDrawerLockMode(DrawerLayout.LOCK_MODE_UNDEFINED);
-            }
+            // Drawer stays locked; avatar action opens it explicitly.
+            mainBinding.getRoot().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
         } else {
             mainBinding.getRoot().setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED);
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
