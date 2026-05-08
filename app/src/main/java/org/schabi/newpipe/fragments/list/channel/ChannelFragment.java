@@ -391,7 +391,7 @@ public class ChannelFragment extends BaseStateFragment<ChannelInfo>
         final int subscribedText = ContextCompat.getColor(activity, R.color.subscribed_text_color);
         // YouTube-style: subscribe button is a solid red pill regardless of theme.
         final int subscribeBackground = ThemeHelper
-                .resolveColorFromAttr(activity, R.attr.colorAccent);
+                .resolveColorFromAttr(activity, android.R.attr.colorAccent);
         final int subscribeText = ContextCompat.getColor(activity, R.color.subscribe_text_color);
 
         if (isSubscribed) {
